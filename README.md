@@ -16,6 +16,7 @@ The platform employs a Medallion Architecture (Bronze, Silver, Gold storage tier
 6. **Operations Console**: A modern single-page dashboard illustrating real-time charts, service statuses, and privacy controls.
 7. **Security, Privacy & Governance**: Apache Ranger handles role-based authorization, column-masking, and row-filtering. PII data is pseudonymized using HMAC-SHA256. GDPR scripts handle user data erasure and audit logs. Apache Atlas tracks metadata cataloging and lineage.
 8. **Orchestration Layer**: Apache Airflow schedules daily transformations, hourly ingest cycles, and weekly GDPR sweeps.
+9. **AI Automation**: Sentiment engine connecting to the Gemini API (with local lexicon fallback) to parse financial news, coupled with a Spark correlation joiner mapping news sentiment score movements to price and volume regimes.
 
 ---
 
@@ -35,7 +36,8 @@ finflow/
 │   ├── serving/              # FastAPI REST endpoints and the static dashboard
 │   ├── security/             # Apache Ranger RBAC integration
 │   ├── privacy/              # PII engines and GDPR erasure utilities
-│   └── governance/           # Apache Atlas lineage and asset registration
+│   ├── governance/           # Apache Atlas lineage and asset registration
+│   └── ai/                   # AI Sentiment Engine (Gemini API integration)
 └── tests/                    # Integration and unit test suite
 ```
 
@@ -54,6 +56,10 @@ To project and scale this architecture in an enterprise environment:
 - **Containerization**: Deploy the stack using Kubernetes (EKS, GKE, or AKS) using official Helm Charts for Kafka, Airflow, and Spark.
 - **Spark on K8s**: Configure Spark to run natively on Kubernetes, spinning up dynamic executor pods that scale based on queue size and release resources upon task completion.
 - **Kafka Tuning**: Configure Kafka with 3 replicas, partition sizes matching CPU core multiples, and producer settings (`enable.idempotence=true`, `acks=all`) to guarantee exactly-once processing.
+
+### AI & Sentiment Processing Scale
+- **LLM Rate-Limiting**: Configure asynchronous batch processing loops with exponential backoff retries to avoid hitting external LLM API rate limits.
+- **Broadcast Joins**: Optimize Spark correlation joins by broadcasting the daily sentiment scores (lightweight table) to executor nodes, avoiding expensive shuffles against huge Gold price history tables.
 
 ### Enterprise Governance & RBAC
 - **Apache Atlas Integration**: Hook the Hive Metastore and Spark listeners directly into Atlas to automatically document dataset structures and trace structural data lineage on every run.
