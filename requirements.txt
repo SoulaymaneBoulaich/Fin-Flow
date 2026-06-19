@@ -37,7 +37,6 @@ httpx==0.27.0
 
 # Security / Privacy
 cryptography==42.0.8
-hashlib2==1.0.0
 
 # Airflow (installed separately via Docker)
 apache-airflow==2.9.1
