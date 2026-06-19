@@ -1,0 +1,61 @@
+{
+  "classifications": [
+    {
+      "name": "PII",
+      "description": "Personally Identifiable Information — data that can identify an individual",
+      "attributeDefs": [
+        {
+          "name": "pii_type",
+          "typeName": "string",
+          "cardinality": "SINGLE",
+          "isOptional": false
+        }
+      ],
+      "superTypes": ["DataClassification"]
+    },
+    {
+      "name": "FINANCIAL",
+      "description": "Financial data including prices, volumes, and transactions",
+      "attributeDefs": [],
+      "superTypes": ["DataClassification"]
+    },
+    {
+      "name": "GDPR_APPLICABLE",
+      "description": "Data subject to GDPR regulations",
+      "attributeDefs": [
+        {
+          "name": "legal_basis",
+          "typeName": "string",
+          "cardinality": "SINGLE",
+          "isOptional": true
+        }
+      ],
+      "superTypes": ["DataClassification"]
+    },
+    {
+      "name": "CONFIDENTIAL",
+      "description": "Internal confidential data — restricted to authorized personnel",
+      "attributeDefs": [],
+      "superTypes": ["DataClassification"]
+    },
+    {
+      "name": "PUBLIC",
+      "description": "Publicly available data with no restrictions",
+      "attributeDefs": [],
+      "superTypes": ["DataClassification"]
+    },
+    {
+      "name": "MASKED",
+      "description": "This column has been masked or tokenized for privacy",
+      "attributeDefs": [
+        {
+          "name": "masking_method",
+          "typeName": "string",
+          "cardinality": "SINGLE",
+          "isOptional": false
+        }
+      ],
+      "superTypes": []
+    }
+  ]
+}

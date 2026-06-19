@@ -1,0 +1,70 @@
+version: 2
+
+sources:
+  - name: silver
+    description: "Silver zone — cleaned and typed data from Bronze"
+    database: finflow
+    schema: silver
+    tables:
+      - name: stock_ticks
+        description: "Cleaned stock tick events, Parquet on MinIO"
+        columns:
+          - name: event_id
+            tests: [not_null, unique]
+          - name: ticker
+            tests: [not_null]
+          - name: close
+            tests:
+              - not_null
+              - dbt_utils.expression_is_true:
+                  expression: "> 0"
+          - name: volume
+            tests:
+              - not_null
+              - dbt_utils.expression_is_true:
+                  expression: ">= 0"
+
+models:
+  - name: stg_stock_ticks
+    description: "Staging view: validated and typed ticks from silver"
+    columns:
+      - name: event_id
+        tests: [not_null, unique]
+      - name: ticker
+        tests: [not_null]
+      - name: close
+        tests: [not_null]
+
+  - name: daily_ohlcv
+    description: "Daily OHLCV summary per ticker with VWAP"
+    columns:
+      - name: ticker_date_key
+        tests: [not_null, unique]
+      - name: ticker
+        tests: [not_null]
+      - name: trade_date
+        tests: [not_null]
+      - name: close
+        tests:
+          - not_null
+          - dbt_utils.expression_is_true:
+              expression: "> 0"
+
+  - name: rolling_averages
+    description: "7, 14, 30-day Simple Moving Averages per ticker"
+    columns:
+      - name: ticker
+        tests: [not_null]
+      - name: trade_date
+        tests: [not_null]
+
+  - name: volatility
+    description: "30 and 90-day annualized volatility per ticker"
+    columns:
+      - name: ticker
+        tests: [not_null]
+      - name: volatility_30d_annualized
+        tests:
+          - dbt_utils.expression_is_true:
+              expression: ">= 0"
+              where: "volatility_30d_annualized IS NOT NULL"

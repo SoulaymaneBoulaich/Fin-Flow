@@ -1,0 +1,41 @@
+{
+  "buckets": [
+    {
+      "name": "finflow",
+      "policy": "readwrite",
+      "description": "Main data lake bucket — Bronze / Silver / Gold zones",
+      "prefixes": {
+        "bronze": "bronze/",
+        "silver": "silver/",
+        "gold":   "gold/",
+        "checkpoints": "checkpoints/",
+        "warehouse": "warehouse/"
+      }
+    },
+    {
+      "name": "finflow-warehouse",
+      "policy": "readwrite",
+      "description": "Hive warehouse location for managed tables"
+    }
+  ],
+  "accessPolicy": {
+    "Version": "2012-10-17",
+    "Statement": [
+      {
+        "Effect": "Allow",
+        "Principal": {"AWS": ["*"]},
+        "Action": ["s3:GetBucketLocation","s3:ListBucket","s3:ListBucketMultipartUploads"],
+        "Resource": ["arn:aws:s3:::finflow","arn:aws:s3:::finflow-warehouse"]
+      },
+      {
+        "Effect": "Allow",
+        "Principal": {"AWS": ["*"]},
+        "Action": [
+          "s3:AbortMultipartUpload","s3:DeleteObject","s3:GetObject",
+          "s3:ListMultipartUploadParts","s3:PutObject"
+        ],
+        "Resource": ["arn:aws:s3:::finflow/*","arn:aws:s3:::finflow-warehouse/*"]
+      }
+    ]
+  }
+}

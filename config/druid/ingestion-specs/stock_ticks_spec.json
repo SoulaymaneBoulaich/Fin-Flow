@@ -1,0 +1,48 @@
+{
+  "type": "kafka",
+  "dataSchema": {
+    "dataSource": "stock_ticks",
+    "timestampSpec": {
+      "column": "timestamp",
+      "format": "iso"
+    },
+    "dimensionsSpec": {
+      "dimensions": [
+        "ticker",
+        "source"
+      ]
+    },
+    "metricsSpec": [
+      { "type": "doubleMax", "name": "high", "fieldName": "high" },
+      { "type": "doubleMin", "name": "low",  "fieldName": "low"  },
+      { "type": "doubleFirst","name": "open", "fieldName": "open", "timeColumn": "timestamp" },
+      { "type": "doubleLast", "name": "close","fieldName": "close","timeColumn": "timestamp" },
+      { "type": "longSum",    "name": "volume","fieldName": "volume" },
+      { "type": "doubleSum",  "name": "vwap_num","fieldName": "vwap" },
+      { "type": "count",      "name": "tick_count" }
+    ],
+    "granularitySpec": {
+      "type": "uniform",
+      "segmentGranularity": "hour",
+      "queryGranularity": "minute",
+      "rollup": true
+    }
+  },
+  "ioConfig": {
+    "type": "kafka",
+    "consumerProperties": {
+      "bootstrap.servers": "kafka-1:9092,kafka-2:9093,kafka-3:9094"
+    },
+    "topic": "stock-ticks",
+    "inputFormat": {
+      "type": "json"
+    },
+    "useEarliestOffset": false
+  },
+  "tuningConfig": {
+    "type": "kafka",
+    "maxRowsPerSegment": 5000000,
+    "maxRowsInMemory": 100000,
+    "intermediatePersistPeriod": "PT1M"
+  }
+}

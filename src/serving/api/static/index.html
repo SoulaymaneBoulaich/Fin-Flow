@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FinFlow Operational Control Center</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+    <div class="glow-backdrop"></div>
+    
+    <header class="app-header">
+        <div class="header-logo">
+            <h1>FINFLOW <span class="logo-sub">// ENTERPRISE OPERATIONAL CONSOLE</span></h1>
+        </div>
+        <div class="system-time" id="clock">00:00:00 UTC</div>
+    </header>
+
+    <!-- Ticker Tape -->
+    <section class="ticker-tape-container">
+        <div class="ticker-tape" id="tickerTape">
+            <!-- Populated dynamically via app.js -->
+            <div class="ticker-item">Loading tickers...</div>
+        </div>
+    </section>
+
+    <main class="dashboard-grid">
+        <!-- Panel 1: Operations & System Health -->
+        <section class="card glassmorphic" id="health-panel">
+            <h2 class="panel-title">System Health & Services</h2>
+            <div class="health-summary">
+                <div class="health-status-badge" id="overallHealth">
+                    <span class="indicator"></span>
+                    <span class="text">Checking Status</span>
+                </div>
+            </div>
+            <div class="service-list" id="servicesList">
+                <div class="service-item" data-service="postgres">
+                    <span class="service-name">PostgreSQL Metadata</span>
+                    <span class="service-status pending">Connecting...</span>
+                </div>
+                <div class="service-item" data-service="minio">
+                    <span class="service-name">MinIO Data Lake</span>
+                    <span class="service-status pending">Connecting...</span>
+                </div>
+                <div class="service-item" data-service="kafka">
+                    <span class="service-name">Kafka Ingestion</span>
+                    <span class="service-status pending">Connecting...</span>
+                </div>
+                <div class="service-item" data-service="cassandra">
+                    <span class="service-name">Cassandra Tickstore</span>
+                    <span class="service-status healthy">Simulated</span>
+                </div>
+            </div>
+        </section>
+
+        <!-- Panel 2: Live Stock & Volatility Analytics -->
+        <section class="card glassmorphic" id="chart-panel">
+            <div class="chart-header">
+                <h2 class="panel-title">Market Visualizer</h2>
+                <div class="ticker-select-container">
+                    <select id="tickerSelector" class="custom-select">
+                        <option value="AAPL">AAPL (Apple)</option>
+                        <option value="TSLA">TSLA (Tesla)</option>
+                        <option value="AMZN">AMZN (Amazon)</option>
+                        <option value="MSFT">MSFT (Microsoft)</option>
+                        <option value="GOOGL">GOOGL (Alphabet)</option>
+                        <option value="NVDA">NVDA (NVIDIA)</option>
+                        <option value="META">META (Meta)</option>
+                        <option value="NFLX">NFLX (Netflix)</option>
+                    </select>
+                </div>
+            </div>
+            <div class="chart-container">
+                <canvas id="stockChart"></canvas>
+            </div>
+            <div class="chart-metrics" id="chartMetrics">
+                <div class="metric-box">
+                    <span class="metric-label">Latest Price</span>
+                    <span class="metric-value" id="metricLatest">-</span>
+                </div>
+                <div class="metric-box">
+                    <span class="metric-label">Daily Range</span>
+                    <span class="metric-value" id="metricRange">-</span>
+                </div>
+                <div class="metric-box">
+                    <span class="metric-label">Avg Volume</span>
+                    <span class="metric-value" id="metricVol">-</span>
+                </div>
+            </div>
+        </section>
+
+        <!-- Panel 3: Medallion Architecture Monitor -->
+        <section class="card glassmorphic" id="pipeline-panel">
+            <h2 class="panel-title">Medallion Pipeline Monitor</h2>
+            <div class="medallion-pipeline">
+                <div class="pipeline-node bronze">
+                    <div class="node-title">Bronze Layer</div>
+                    <div class="node-desc">Raw Ingestion (JSON)</div>
+                    <div class="node-status active">Streaming</div>
+                </div>
+                <div class="pipeline-connector">
+                    <div class="pulse-dot"></div>
+                </div>
+                <div class="pipeline-node silver">
+                    <div class="node-title">Silver Layer</div>
+                    <div class="node-desc">Cleaned & Pseudonymized (Parquet)</div>
+                    <div class="node-status active">Batch Processing</div>
+                </div>
+                <div class="pipeline-connector">
+                    <div class="pulse-dot"></div>
+                </div>
+                <div class="pipeline-node gold">
+                    <div class="node-title">Gold Layer</div>
+                    <div class="node-desc">Business Aggregates</div>
+                    <div class="node-status active">OLAP Optimized</div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Panel 4: GDPR & Privacy Sandbox -->
+        <section class="card glassmorphic" id="privacy-panel">
+            <h2 class="panel-title">Privacy Sandbox & GDPR Control</h2>
+            <p class="panel-desc">Test real-time client-side PII detection, masking, and pseudonymization rules.</p>
+            <div class="privacy-playground">
+                <div class="playground-form">
+                    <div class="form-group">
+                        <label for="piiName">Full Name:</label>
+                        <input type="text" id="piiName" placeholder="e.g. John Doe" value="John Doe">
+                    </div>
+                    <div class="form-group">
+                        <label for="piiEmail">Email Address:</label>
+                        <input type="email" id="piiEmail" placeholder="e.g. john@company.com" value="john@company.com">
+                    </div>
+                    <div class="form-group">
+                        <label for="piiAge">Age:</label>
+                        <input type="number" id="piiAge" value="34">
+                    </div>
+                    <button class="btn btn-primary" id="btnApplyPrivacy">Apply Masking Rules</button>
+                </div>
+                <div class="playground-result">
+                    <h3>Pseudonymized Records (MinIO Silver Layer simulation)</h3>
+                    <pre id="privacyResult">{ "status": "Waiting for input..." }</pre>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <footer class="app-footer">
+        <p>FinFlow Enterprise Stock Platform &copy; 2026. Built on Apache Kafka, Spark, Cassandra, Airflow, and MinIO.</p>
+    </footer>
+
+    <script src="/static/app.js"></script>
+</body>
+</html>

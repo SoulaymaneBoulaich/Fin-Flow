@@ -1,0 +1,33 @@
+name: finflow
+version: '1.0.0'
+config-version: 2
+
+profile: finflow
+
+model-paths: ["models"]
+analysis-paths: ["analyses"]
+test-paths: ["tests"]
+seed-paths: ["seeds"]
+macro-paths: ["macros"]
+snapshot-paths: ["snapshots"]
+
+target-path: "target"
+clean-targets:
+  - "target"
+  - "dbt_packages"
+
+models:
+  finflow:
+    staging:
+      +materialized: view
+      +schema: staging
+    marts:
+      finance:
+        +materialized: incremental
+        +schema: marts_finance
+      trading:
+        +materialized: table
+        +schema: marts_trading
+
+vars:
+  start_date: '2024-01-01'

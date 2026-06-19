@@ -1,0 +1,29 @@
+SUPERSET_WEBSERVER_PORT = 8088
+SECRET_KEY = "superset_secret_finflow_2024"
+SQLALCHEMY_DATABASE_URI = "postgresql+psycopg2://finflow:FinFlow_PG_2024!@postgres:5432/finflow_app"
+
+# Cache
+CACHE_CONFIG = {
+    "CACHE_TYPE": "SimpleCache",
+    "CACHE_DEFAULT_TIMEOUT": 300,
+}
+
+# Security
+WTF_CSRF_ENABLED = True
+SESSION_COOKIE_HTTPONLY = True
+SESSION_COOKIE_SECURE = False  # set True in production with TLS
+REMEMBER_COOKIE_HTTPONLY = True
+
+# Feature flags
+FEATURE_FLAGS = {
+    "ENABLE_TEMPLATE_PROCESSING": True,
+    "DASHBOARD_NATIVE_FILTERS": True,
+    "DASHBOARD_CROSS_FILTERS": True,
+}
+
+# Row limit
+ROW_LIMIT = 100000
+SUPERSET_WEBSERVER_TIMEOUT = 300
+
+# Enable API
+ENABLE_PROXY_FIX = True

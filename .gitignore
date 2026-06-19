@@ -1,0 +1,31 @@
+# Python virtual environments
+.venv/
+venv/
+ENV/
+
+# Python cache & compiled files
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache/
+
+# IDE files
+.vscode/
+.idea/
+
+# Local configuration & environment variables
+.env
+!.env.example
+
+# Logs
+*.log
+logs/
+
+# Build and testing artifacts
+target/
+dbt_packages/
+.pytest_cache/
+htmlcov/
+.coverage
+.cache/

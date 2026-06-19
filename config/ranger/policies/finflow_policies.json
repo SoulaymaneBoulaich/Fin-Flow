@@ -1,0 +1,86 @@
+{
+  "policies": [
+    {
+      "name": "finflow_hive_analyst",
+      "resource": {
+        "type": "database",
+        "value": "finflow_gold"
+      },
+      "policyItems": [
+        {
+          "accesses": [{"type": "select", "isAllowed": true}],
+          "groups": ["analysts"],
+          "conditions": []
+        }
+      ]
+    },
+    {
+      "name": "finflow_hive_engineer",
+      "resource": {
+        "type": "database",
+        "value": "*"
+      },
+      "policyItems": [
+        {
+          "accesses": [
+            {"type": "select", "isAllowed": true},
+            {"type": "update", "isAllowed": true},
+            {"type": "create", "isAllowed": true},
+            {"type": "drop",   "isAllowed": true}
+          ],
+          "groups": ["engineers"],
+          "conditions": []
+        }
+      ]
+    },
+    {
+      "name": "pii_email_masking",
+      "resource": {
+        "type": "column",
+        "value": "email"
+      },
+      "dataMaskPolicyItems": [
+        {
+          "dataMaskInfo": {"dataMaskType": "MASK_SHOW_FIRST_4"},
+          "accesses": [{"type": "select", "isAllowed": true}],
+          "groups": ["analysts"],
+          "conditions": []
+        }
+      ]
+    },
+    {
+      "name": "pii_full_name_masking",
+      "resource": {
+        "type": "column",
+        "value": "full_name"
+      },
+      "dataMaskPolicyItems": [
+        {
+          "dataMaskInfo": {"dataMaskType": "MASK"},
+          "accesses": [{"type": "select", "isAllowed": true}],
+          "groups": ["analysts"],
+          "conditions": []
+        }
+      ]
+    }
+  ],
+  "roles": {
+    "analyst": {
+      "description": "Read access to Silver and Gold zones",
+      "permissions": ["read_silver", "read_gold", "access_superset"]
+    },
+    "engineer": {
+      "description": "Full pipeline access",
+      "permissions": ["read_bronze", "write_bronze", "read_silver", "write_silver",
+                      "read_gold", "write_gold", "submit_spark", "manage_airflow"]
+    },
+    "admin": {
+      "description": "Full access including policies",
+      "permissions": ["*"]
+    },
+    "api_consumer": {
+      "description": "Read-only API access",
+      "permissions": ["read_gold", "read_api"]
+    }
+  }
+}

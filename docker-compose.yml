@@ -1,0 +1,653 @@
+version: "3.8"
+
+# ─────────────────────────────────────────────────────────────────────────────
+# FinFlow Enterprise Data Engineering Platform
+# Full Apache Stack: Kafka, NiFi, Spark, Airflow, Hive, Druid,
+#                   MinIO, Cassandra, Superset, FastAPI
+# ─────────────────────────────────────────────────────────────────────────────
+
+x-airflow-common: &airflow-common
+  image: apache/airflow:2.9.1
+  environment:
+    AIRFLOW__CORE__EXECUTOR: LocalExecutor
+    AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/airflow
+    AIRFLOW__CORE__FERNET_KEY: ${AIRFLOW__CORE__FERNET_KEY}
+    AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION: "true"
+    AIRFLOW__CORE__LOAD_EXAMPLES: "false"
+    AIRFLOW__API__AUTH_BACKENDS: airflow.api.auth.backend.basic_auth
+    AIRFLOW__SCHEDULER__ENABLE_HEALTH_CHECK: "true"
+    PYTHONPATH: /opt/airflow/src
+  volumes:
+    - ./src/orchestration/dags:/opt/airflow/dags
+    - ./src:/opt/airflow/src
+    - ./logs/airflow:/opt/airflow/logs
+    - ./config/airflow:/opt/airflow/config
+  depends_on:
+    postgres:
+      condition: service_healthy
+  networks:
+    - finflow-net
+
+x-spark-common: &spark-common
+  image: bitnami/spark:3.5.1
+  environment:
+    SPARK_MODE: worker
+    SPARK_MASTER_URL: spark://spark-master:7077
+    SPARK_WORKER_MEMORY: 2G
+    SPARK_WORKER_CORES: 2
+    SPARK_RPC_AUTHENTICATION_ENABLED: "no"
+    SPARK_RPC_ENCRYPTION_ENABLED: "no"
+    SPARK_LOCAL_STORAGE_ENCRYPTION_ENABLED: "no"
+    SPARK_SSL_ENABLED: "no"
+  networks:
+    - finflow-net
+
+networks:
+  finflow-net:
+    driver: bridge
+
+volumes:
+  postgres-data:
+  minio-data:
+  cassandra-data:
+  zookeeper-data:
+  zookeeper-logs:
+  kafka-data-1:
+  kafka-data-2:
+  kafka-data-3:
+  druid-var:
+  druid-metadata:
+
+services:
+
+  # ─────────────────────────────────────────────────────────────────────────
+  # INFRASTRUCTURE LAYER
+  # ─────────────────────────────────────────────────────────────────────────
+
+  postgres:
+    image: postgres:16-alpine
+    container_name: finflow-postgres
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_MULTIPLE_DATABASES: airflow,hive_metastore,finflow_app
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ./scripts/init_postgres.sh:/docker-entrypoint-initdb.d/init_postgres.sh
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "${POSTGRES_USER}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - finflow-net
+
+  # ─────────────────────────────────────────────────────────────────────────
+  # KAFKA CLUSTER (3 Brokers + Zookeeper)
+  # ─────────────────────────────────────────────────────────────────────────
+
+  zookeeper:
+    image: confluentinc/cp-zookeeper:7.6.1
+    container_name: finflow-zookeeper
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+    volumes:
+      - zookeeper-data:/var/lib/zookeeper/data
+      - zookeeper-logs:/var/lib/zookeeper/log
+    ports:
+      - "2181:2181"
+    healthcheck:
+      test: ["CMD", "bash", "-c", "echo ruok | nc localhost 2181"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - finflow-net
+
+  kafka-1:
+    image: confluentinc/cp-kafka:7.6.1
+    container_name: finflow-kafka-1
+    depends_on:
+      zookeeper:
+        condition: service_healthy
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka-1:9092,PLAINTEXT_HOST://localhost:${KAFKA_EXTERNAL_PORT_1}
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_LOG_RETENTION_MS: ${KAFKA_RETENTION_MS}
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "false"
+      KAFKA_DEFAULT_REPLICATION_FACTOR: 3
+      KAFKA_NUM_PARTITIONS: 5
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 3
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+    volumes:
+      - kafka-data-1:/var/lib/kafka/data
+    ports:
+      - "${KAFKA_EXTERNAL_PORT_1}:${KAFKA_EXTERNAL_PORT_1}"
+    healthcheck:
+      test: ["CMD", "kafka-broker-api-versions", "--bootstrap-server", "kafka-1:9092"]
+      interval: 15s
+      timeout: 10s
+      retries: 10
+    networks:
+      - finflow-net
+
+  kafka-2:
+    image: confluentinc/cp-kafka:7.6.1
+    container_name: finflow-kafka-2
+    depends_on:
+      zookeeper:
+        condition: service_healthy
+    environment:
+      KAFKA_BROKER_ID: 2
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka-2:9093,PLAINTEXT_HOST://localhost:${KAFKA_EXTERNAL_PORT_2}
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_LOG_RETENTION_MS: ${KAFKA_RETENTION_MS}
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "false"
+      KAFKA_DEFAULT_REPLICATION_FACTOR: 3
+      KAFKA_NUM_PARTITIONS: 5
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 3
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+    volumes:
+      - kafka-data-2:/var/lib/kafka/data
+    ports:
+      - "${KAFKA_EXTERNAL_PORT_2}:${KAFKA_EXTERNAL_PORT_2}"
+    healthcheck:
+      test: ["CMD", "kafka-broker-api-versions", "--bootstrap-server", "kafka-2:9093"]
+      interval: 15s
+      timeout: 10s
+      retries: 10
+    networks:
+      - finflow-net
+
+  kafka-3:
+    image: confluentinc/cp-kafka:7.6.1
+    container_name: finflow-kafka-3
+    depends_on:
+      zookeeper:
+        condition: service_healthy
+    environment:
+      KAFKA_BROKER_ID: 3
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka-3:9094,PLAINTEXT_HOST://localhost:${KAFKA_EXTERNAL_PORT_3}
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_LOG_RETENTION_MS: ${KAFKA_RETENTION_MS}
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "false"
+      KAFKA_DEFAULT_REPLICATION_FACTOR: 3
+      KAFKA_NUM_PARTITIONS: 5
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 3
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+    volumes:
+      - kafka-data-3:/var/lib/kafka/data
+    ports:
+      - "${KAFKA_EXTERNAL_PORT_3}:${KAFKA_EXTERNAL_PORT_3}"
+    healthcheck:
+      test: ["CMD", "kafka-broker-api-versions", "--bootstrap-server", "kafka-3:9094"]
+      interval: 15s
+      timeout: 10s
+      retries: 10
+    networks:
+      - finflow-net
+
+  kafka-init:
+    image: confluentinc/cp-kafka:7.6.1
+    container_name: finflow-kafka-init
+    depends_on:
+      kafka-1:
+        condition: service_healthy
+      kafka-2:
+        condition: service_healthy
+      kafka-3:
+        condition: service_healthy
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        echo "Creating Kafka topics..."
+        kafka-topics --bootstrap-server kafka-1:9092 --create --if-not-exists \
+          --topic stock-ticks --partitions 5 --replication-factor 3 \
+          --config retention.ms=604800000
+        kafka-topics --bootstrap-server kafka-1:9092 --create --if-not-exists \
+          --topic trade-events --partitions 5 --replication-factor 3 \
+          --config retention.ms=604800000
+        kafka-topics --bootstrap-server kafka-1:9092 --create --if-not-exists \
+          --topic user-events --partitions 3 --replication-factor 3 \
+          --config retention.ms=604800000
+        kafka-topics --bootstrap-server kafka-1:9092 --list
+        echo "Kafka topics created successfully!"
+    networks:
+      - finflow-net
+
+  # ─────────────────────────────────────────────────────────────────────────
+  # MINIO — S3-Compatible Object Store (Data Lake)
+  # ─────────────────────────────────────────────────────────────────────────
+
+  minio:
+    image: minio/minio:RELEASE.2024-05-28T17-19-04Z
+    container_name: finflow-minio
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
+    volumes:
+      - minio-data:/data
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - finflow-net
+
+  minio-init:
+    image: minio/mc:RELEASE.2024-05-24T09-08-49Z
+    container_name: finflow-minio-init
+    depends_on:
+      minio:
+        condition: service_healthy
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        mc alias set finflow http://minio:9000 ${MINIO_ROOT_USER} ${MINIO_ROOT_PASSWORD}
+        mc mb finflow/finflow --ignore-existing
+        mc mb finflow/finflow-warehouse --ignore-existing
+        mc policy set public finflow/finflow
+        echo "MinIO buckets initialized!"
+    networks:
+      - finflow-net
+
+  # ─────────────────────────────────────────────────────────────────────────
+  # APACHE CASSANDRA — Time-Series Tick Storage
+  # ─────────────────────────────────────────────────────────────────────────
+
+  cassandra:
+    image: cassandra:4.1
+    container_name: finflow-cassandra
+    environment:
+      CASSANDRA_CLUSTER_NAME: FinFlowCluster
+      CASSANDRA_DC: datacenter1
+      CASSANDRA_ENDPOINT_SNITCH: GossipingPropertyFileSnitch
+      HEAP_NEWSIZE: 128M
+      MAX_HEAP_SIZE: 512M
+    volumes:
+      - cassandra-data:/var/lib/cassandra
+      - ./src/storage/cassandra/schemas.cql:/docker-entrypoint-initdb.d/schemas.cql
+    ports:
+      - "9042:9042"
+    healthcheck:
+      test: ["CMD-SHELL", "cqlsh -e 'describe cluster'"]
+      interval: 30s
+      timeout: 15s
+      retries: 10
+      start_period: 60s
+    networks:
+      - finflow-net
+
+  # ─────────────────────────────────────────────────────────────────────────
+  # APACHE SPARK CLUSTER
+  # ─────────────────────────────────────────────────────────────────────────
+
+  spark-master:
+    image: bitnami/spark:3.5.1
+    container_name: finflow-spark-master
+    environment:
+      SPARK_MODE: master
+      SPARK_RPC_AUTHENTICATION_ENABLED: "no"
+      SPARK_RPC_ENCRYPTION_ENABLED: "no"
+      SPARK_LOCAL_STORAGE_ENCRYPTION_ENABLED: "no"
+      SPARK_SSL_ENABLED: "no"
+    ports:
+      - "8081:8080"
+      - "7077:7077"
+    volumes:
+      - ./src:/opt/bitnami/spark/finflow_src
+      - ./config/spark/spark-defaults.conf:/opt/bitnami/spark/conf/spark-defaults.conf
+    networks:
+      - finflow-net
+
+  spark-worker-1:
+    <<: *spark-common
+    container_name: finflow-spark-worker-1
+    depends_on:
+      - spark-master
+    environment:
+      SPARK_MODE: worker
+      SPARK_MASTER_URL: spark://spark-master:7077
+      SPARK_WORKER_MEMORY: 2G
+      SPARK_WORKER_CORES: 2
+    ports:
+      - "8082:8081"
+
+  spark-worker-2:
+    <<: *spark-common
+    container_name: finflow-spark-worker-2
+    depends_on:
+      - spark-master
+    environment:
+      SPARK_MODE: worker
+      SPARK_MASTER_URL: spark://spark-master:7077
+      SPARK_WORKER_MEMORY: 2G
+      SPARK_WORKER_CORES: 2
+    ports:
+      - "8083:8081"
+
+  # ─────────────────────────────────────────────────────────────────────────
+  # APACHE AIRFLOW — Orchestration
+  # ─────────────────────────────────────────────────────────────────────────
+
+  airflow-init:
+    <<: *airflow-common
+    container_name: finflow-airflow-init
+    entrypoint: /bin/bash
+    command:
+      - -c
+      - |
+        airflow db migrate
+        airflow users create \
+          --username ${AIRFLOW_ADMIN_USER} \
+          --firstname Admin \
+          --lastname User \
+          --role Admin \
+          --email admin@finflow.local \
+          --password ${AIRFLOW_ADMIN_PASSWORD}
+        echo "Airflow initialized!"
+    restart: on-failure
+
+  airflow-webserver:
+    <<: *airflow-common
+    container_name: finflow-airflow-webserver
+    command: webserver
+    ports:
+      - "${AIRFLOW_PORT}:8080"
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+    depends_on:
+      airflow-init:
+        condition: service_completed_successfully
+    restart: unless-stopped
+
+  airflow-scheduler:
+    <<: *airflow-common
+    container_name: finflow-airflow-scheduler
+    command: scheduler
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "http://localhost:8974/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+    depends_on:
+      airflow-init:
+        condition: service_completed_successfully
+    restart: unless-stopped
+
+  # ─────────────────────────────────────────────────────────────────────────
+  # APACHE HIVE — Batch Data Warehouse
+  # ─────────────────────────────────────────────────────────────────────────
+
+  hive-metastore:
+    image: apache/hive:3.1.3
+    container_name: finflow-hive-metastore
+    environment:
+      SERVICE_NAME: metastore
+      DB_DRIVER: postgres
+      SERVICE_OPTS: >-
+        -Djavax.jdo.option.ConnectionDriverName=org.postgresql.Driver
+        -Djavax.jdo.option.ConnectionURL=jdbc:postgresql://postgres:5432/hive_metastore
+        -Djavax.jdo.option.ConnectionUserName=${POSTGRES_USER}
+        -Djavax.jdo.option.ConnectionPassword=${POSTGRES_PASSWORD}
+    volumes:
+      - ./config/hive/hive-site.xml:/opt/hive/conf/hive-site.xml
+    ports:
+      - "9083:9083"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - finflow-net
+
+  hive-server:
+    image: apache/hive:3.1.3
+    container_name: finflow-hive-server
+    environment:
+      SERVICE_NAME: hiveserver2
+      SERVICE_OPTS: >-
+        -Dhive.metastore.uris=thrift://hive-metastore:9083
+    ports:
+      - "10000:10000"
+      - "10002:10002"
+    depends_on:
+      - hive-metastore
+    volumes:
+      - ./config/hive/hive-site.xml:/opt/hive/conf/hive-site.xml
+    networks:
+      - finflow-net
+
+  # ─────────────────────────────────────────────────────────────────────────
+  # APACHE DRUID — Real-Time OLAP
+  # ─────────────────────────────────────────────────────────────────────────
+
+  druid-coordinator:
+    image: apache/druid:29.0.1
+    container_name: finflow-druid-coordinator
+    command: coordinator
+    environment:
+      DRUID_MAXDIRECTMEMORYSIZE: 512m
+      DRUID_XMX: 512m
+      DRUID_XMS: 512m
+      druid_extensions_loadList: '["druid-hdfs-storage","druid-kafka-indexing-service","druid-datasketches","postgresql-metadata-storage"]'
+      druid_metadata_storage_type: postgresql
+      druid_metadata_storage_connector_connectURI: jdbc:postgresql://postgres:5432/finflow_app
+      druid_metadata_storage_connector_user: ${POSTGRES_USER}
+      druid_metadata_storage_connector_password: ${POSTGRES_PASSWORD}
+      druid_coordinator_balancer_strategy: cachingCost
+      druid_indexer_queue_startDelay: PT30S
+    volumes:
+      - druid-metadata:/opt/druid/var
+    ports:
+      - "${DRUID_COORDINATOR_PORT}:8081"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - finflow-net
+
+  druid-broker:
+    image: apache/druid:29.0.1
+    container_name: finflow-druid-broker
+    command: broker
+    environment:
+      DRUID_MAXDIRECTMEMORYSIZE: 512m
+      DRUID_XMX: 512m
+      DRUID_XMS: 512m
+      druid_metadata_storage_type: postgresql
+      druid_metadata_storage_connector_connectURI: jdbc:postgresql://postgres:5432/finflow_app
+      druid_metadata_storage_connector_user: ${POSTGRES_USER}
+      druid_metadata_storage_connector_password: ${POSTGRES_PASSWORD}
+    volumes:
+      - druid-var:/opt/druid/var
+    ports:
+      - "${DRUID_BROKER_PORT}:8082"
+    depends_on:
+      - druid-coordinator
+    networks:
+      - finflow-net
+
+  druid-historical:
+    image: apache/druid:29.0.1
+    container_name: finflow-druid-historical
+    command: historical
+    environment:
+      DRUID_MAXDIRECTMEMORYSIZE: 512m
+      DRUID_XMX: 512m
+      DRUID_XMS: 512m
+      druid_metadata_storage_type: postgresql
+      druid_metadata_storage_connector_connectURI: jdbc:postgresql://postgres:5432/finflow_app
+      druid_metadata_storage_connector_user: ${POSTGRES_USER}
+      druid_metadata_storage_connector_password: ${POSTGRES_PASSWORD}
+      druid_segmentCache_locations: '[{"path":"/opt/druid/var/druid/segment-cache","maxSize":300000000000}]'
+    volumes:
+      - druid-var:/opt/druid/var
+    ports:
+      - "8083:8083"
+    depends_on:
+      - druid-coordinator
+    networks:
+      - finflow-net
+
+  druid-router:
+    image: apache/druid:29.0.1
+    container_name: finflow-druid-router
+    command: router
+    environment:
+      DRUID_MAXDIRECTMEMORYSIZE: 128m
+      DRUID_XMX: 256m
+      DRUID_XMS: 128m
+      druid_router_http_numConnections: 25
+      druid_router_http_readTimeout: PT5M
+    ports:
+      - "${DRUID_ROUTER_PORT}:8888"
+    depends_on:
+      - druid-broker
+    networks:
+      - finflow-net
+
+  druid-middlemanager:
+    image: apache/druid:29.0.1
+    container_name: finflow-druid-middlemanager
+    command: middleManager
+    environment:
+      DRUID_MAXDIRECTMEMORYSIZE: 512m
+      DRUID_XMX: 512m
+      DRUID_XMS: 512m
+      druid_metadata_storage_type: postgresql
+      druid_metadata_storage_connector_connectURI: jdbc:postgresql://postgres:5432/finflow_app
+      druid_metadata_storage_connector_user: ${POSTGRES_USER}
+      druid_metadata_storage_connector_password: ${POSTGRES_PASSWORD}
+    volumes:
+      - druid-var:/opt/druid/var
+    ports:
+      - "8091:8091"
+    depends_on:
+      - druid-coordinator
+    networks:
+      - finflow-net
+
+  # ─────────────────────────────────────────────────────────────────────────
+  # APACHE SUPERSET — BI Dashboards
+  # ─────────────────────────────────────────────────────────────────────────
+
+  superset:
+    image: apache/superset:4.0.1
+    container_name: finflow-superset
+    environment:
+      SUPERSET_SECRET_KEY: ${SUPERSET_SECRET_KEY}
+      SQLALCHEMY_DATABASE_URI: postgresql+psycopg2://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/finflow_app
+    volumes:
+      - ./config/superset/superset_config.py:/app/pythonpath/superset_config.py
+    ports:
+      - "${SUPERSET_PORT}:8088"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    command: >
+      bash -c "
+        superset db upgrade &&
+        superset fab create-admin
+          --username ${SUPERSET_ADMIN_USER}
+          --firstname Admin
+          --lastname FinFlow
+          --email admin@finflow.local
+          --password ${SUPERSET_ADMIN_PASSWORD} || true &&
+        superset init &&
+        superset run -h 0.0.0.0 -p 8088
+      "
+    networks:
+      - finflow-net
+
+  # ─────────────────────────────────────────────────────────────────────────
+  # FASTAPI — REST Serving Layer
+  # ─────────────────────────────────────────────────────────────────────────
+
+  api:
+    build:
+      context: .
+      dockerfile: src/serving/Dockerfile
+    container_name: finflow-api
+    environment:
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: "5432"
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_APP_DB: ${POSTGRES_APP_DB}
+      DRUID_BROKER_PORT: ${DRUID_BROKER_PORT}
+      API_SECRET_KEY: ${API_SECRET_KEY}
+    ports:
+      - "${API_PORT}:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - ./src:/app/src
+    networks:
+      - finflow-net
+
+  # ─────────────────────────────────────────────────────────────────────────
+  # DATA GENERATION — Producers
+  # ─────────────────────────────────────────────────────────────────────────
+
+  stock-producer:
+    build:
+      context: .
+      dockerfile: src/generation/Dockerfile
+    container_name: finflow-stock-producer
+    environment:
+      KAFKA_BROKER_1: kafka-1:9092
+      KAFKA_BROKER_2: kafka-2:9093
+      KAFKA_BROKER_3: kafka-3:9094
+      TICKERS: ${TICKERS}
+      TICK_INTERVAL_SECONDS: ${TICK_INTERVAL_SECONDS}
+      KAFKA_TOPIC_STOCK_TICKS: ${KAFKA_TOPIC_STOCK_TICKS}
+      KAFKA_TOPIC_TRADE_EVENTS: ${KAFKA_TOPIC_TRADE_EVENTS}
+      KAFKA_TOPIC_USER_EVENTS: ${KAFKA_TOPIC_USER_EVENTS}
+      SYNTHETIC_USERS_COUNT: ${SYNTHETIC_USERS_COUNT}
+      TRADE_EVENTS_PER_MINUTE: ${TRADE_EVENTS_PER_MINUTE}
+    depends_on:
+      kafka-init:
+        condition: service_completed_successfully
+    volumes:
+      - ./src:/app/src
+    networks:
+      - finflow-net
+
+  # ─────────────────────────────────────────────────────────────────────────
+  # KAFKA UI (optional, for debugging)
+  # ─────────────────────────────────────────────────────────────────────────
+
+  kafka-ui:
+    image: provectuslabs/kafka-ui:latest
+    container_name: finflow-kafka-ui
+    environment:
+      KAFKA_CLUSTERS_0_NAME: finflow-cluster
+      KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka-1:9092,kafka-2:9093,kafka-3:9094
+      KAFKA_CLUSTERS_0_ZOOKEEPER: zookeeper:2181
+    ports:
+      - "8090:8080"
+    depends_on:
+      kafka-init:
+        condition: service_completed_successfully
+    networks:
+      - finflow-net
