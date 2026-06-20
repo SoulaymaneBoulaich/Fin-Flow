@@ -29,7 +29,7 @@ x-airflow-common: &airflow-common
     - finflow-net
 
 x-spark-common: &spark-common
-  image: bitnami/spark:3.5.1
+  image: bitnamilegacy/spark:3.5.1
   environment:
     SPARK_MODE: worker
     SPARK_MASTER_URL: spark://spark-master:7077
@@ -298,7 +298,7 @@ services:
   # ─────────────────────────────────────────────────────────────────────────
 
   spark-master:
-    image: bitnami/spark:3.5.1
+    image: bitnamilegacy/spark:3.5.1
     container_name: finflow-spark-master
     environment:
       SPARK_MODE: master
