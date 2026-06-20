@@ -17,6 +17,7 @@ sys.path.insert(0, "/app/src")
 from generation.synthetic_users import initialize_users
 from generation.stock_producer import main as run_stock_producer, _shutdown as stock_shutdown
 from generation.trade_simulator import main as run_trade_simulator, _shutdown as trade_shutdown
+from generation.cassandra_consumer import run_consumer as run_cassandra_consumer, _shutdown as cassandra_shutdown
 from ingestion.kafka.producer import FinFlowProducer
 
 BROKERS: str = ",".join([
@@ -33,6 +34,7 @@ def _signal_handler(sig, frame):
     _global_shutdown.set()
     stock_shutdown.set()
     trade_shutdown.set()
+    cassandra_shutdown.set()
 
 
 def main():
@@ -65,6 +67,14 @@ def main():
         daemon=True,
     )
     trade_thread.start()
+
+    # Step 4: Start Cassandra consumer in background thread
+    cassandra_thread = threading.Thread(
+        target=run_cassandra_consumer,
+        name="cassandra-consumer-main",
+        daemon=True,
+    )
+    cassandra_thread.start()
 
     logger.info("All data generators running. Press Ctrl+C to stop.")
     _global_shutdown.wait()

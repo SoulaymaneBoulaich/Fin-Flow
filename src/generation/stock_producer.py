@@ -15,6 +15,7 @@ import sys
 import signal
 import time
 import threading
+import random
 from datetime import datetime, timezone
 from typing import Optional
 
@@ -39,8 +40,15 @@ BROKERS: str = ",".join([
 _shutdown = threading.Event()
 
 
+_fallback_prices: dict[str, float] = {
+    "AAPL": 185.0, "TSLA": 245.0, "AMZN": 191.0,
+    "MSFT": 420.0, "GOOGL": 175.0, "NVDA": 900.0,
+    "META": 530.0, "NFLX": 680.0
+}
+
+
 def _fetch_tick(ticker: str) -> Optional[TickEvent]:
-    """Fetch the latest price for a single ticker. Returns None on failure."""
+    """Fetch the latest price for a single ticker. Falls back to simulation on failure."""
     try:
         tk = yf.Ticker(ticker)
         # fast_info is much faster than history() for live data
@@ -48,14 +56,16 @@ def _fetch_tick(ticker: str) -> Optional[TickEvent]:
 
         price = float(info.last_price)
         if price <= 0:
-            logger.warning(f"[{ticker}] Received non-positive price: {price}. Skipping.")
-            return None
+            raise ValueError(f"Received non-positive price: {price}")
 
         # yFinance fast_info doesn't always have open/high/low; fall back to price
         high = float(getattr(info, "year_high", price) or price)
         low = float(getattr(info, "year_low", price) or price)
         prev_close = float(getattr(info, "previous_close", price) or price)
         volume = int(getattr(info, "three_month_average_volume", 0) or 0)
+
+        # Update fallback cache
+        _fallback_prices[ticker] = price
 
         event = TickEvent(
             ticker=ticker,
@@ -71,8 +81,25 @@ def _fetch_tick(ticker: str) -> Optional[TickEvent]:
         return event
 
     except Exception as exc:
-        logger.error(f"[{ticker}] Failed to fetch tick: {exc}")
-        return None
+        logger.warning(f"[{ticker}] Failed to fetch live tick via yFinance ({exc}). Using simulated fallback.")
+        base = _fallback_prices.get(ticker, 100.0)
+        # Apply a small random walk change (-0.5% to +0.5%)
+        change = random.uniform(-0.005, 0.005)
+        new_price = round(base * (1 + change), 2)
+        _fallback_prices[ticker] = new_price
+
+        event = TickEvent(
+            ticker=ticker,
+            timestamp=datetime.now(timezone.utc),
+            open=round(base, 2),
+            high=round(max(base, new_price) * 1.002, 2),
+            low=round(min(base, new_price) * 0.998, 2),
+            close=new_price,
+            volume=random.randint(100_000, 1_000_000),
+            vwap=new_price,
+            source="simulated",
+        )
+        return event
 
 
 def _producer_loop(ticker: str, producer: FinFlowProducer) -> None:
@@ -104,8 +131,9 @@ def _handle_signal(sig, frame):
 
 
 def main() -> None:
-    signal.signal(signal.SIGINT, _handle_signal)
-    signal.signal(signal.SIGTERM, _handle_signal)
+    if threading.current_thread() is threading.main_thread():
+        signal.signal(signal.SIGINT, _handle_signal)
+        signal.signal(signal.SIGTERM, _handle_signal)
 
     logger.info(f"Starting FinFlow Stock Producer for tickers: {TICKERS}")
     logger.info(f"Kafka brokers: {BROKERS} | Topic: {TOPIC} | Interval: {INTERVAL}s")

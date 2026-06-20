@@ -1,12 +1,12 @@
-"""
-Cassandra CQL schema definitions for FinFlow.
-Run this file against Cassandra using: cqlsh -f schemas.cql
-
-Tables:
- - tick_data: High-frequency tick storage optimized for time-series access
- - trade_events: Stored trade executions
- - user_profiles: Denormalized user data for fast lookups
-"""
+-- ─────────────────────────────────────────────────────────────────────────────
+-- Cassandra CQL schema definitions for FinFlow.
+-- Run this file against Cassandra using: cqlsh -f schemas.cql
+-- 
+-- Tables:
+--  - tick_data: High-frequency tick storage optimized for time-series access
+--  - trade_events: Stored trade executions
+--  - user_profiles: Denormalized user data for fast lookups
+-- ─────────────────────────────────────────────────────────────────────────────
 
 -- ─────────────────────────────────────────────────────────────────────────────
 -- Create keyspace

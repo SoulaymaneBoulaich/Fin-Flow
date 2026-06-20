@@ -132,8 +132,9 @@ def _handle_signal(sig, frame):
 
 
 def main() -> None:
-    signal.signal(signal.SIGINT, _handle_signal)
-    signal.signal(signal.SIGTERM, _handle_signal)
+    if threading.current_thread() is threading.main_thread():
+        signal.signal(signal.SIGINT, _handle_signal)
+        signal.signal(signal.SIGTERM, _handle_signal)
 
     producer = FinFlowProducer(bootstrap_servers=BROKERS)
 

@@ -17,6 +17,8 @@ x-airflow-common: &airflow-common
     AIRFLOW__API__AUTH_BACKENDS: airflow.api.auth.backend.basic_auth
     AIRFLOW__SCHEDULER__ENABLE_HEALTH_CHECK: "true"
     PYTHONPATH: /opt/airflow/src
+    GEMINI_API_KEY: ${GEMINI_API_KEY}
+    DEFAULT_CHAT_ID: ${DEFAULT_CHAT_ID}
   volumes:
     - ./src/orchestration/dags:/opt/airflow/dags
     - ./src:/opt/airflow/src
@@ -94,6 +96,7 @@ services:
     environment:
       ZOOKEEPER_CLIENT_PORT: 2181
       ZOOKEEPER_TICK_TIME: 2000
+      KAFKA_OPTS: "-Dzookeeper.4lw.commands.whitelist=*"
     volumes:
       - zookeeper-data:/var/lib/zookeeper/data
       - zookeeper-logs:/var/lib/zookeeper/log
@@ -287,9 +290,9 @@ services:
     healthcheck:
       test: ["CMD-SHELL", "cqlsh -e 'describe cluster'"]
       interval: 30s
-      timeout: 15s
+      timeout: 30s
       retries: 10
-      start_period: 60s
+      start_period: 120s
     networks:
       - finflow-net
 
@@ -502,7 +505,7 @@ services:
     volumes:
       - druid-var:/opt/druid/var
     ports:
-      - "8083:8083"
+      - "8883:8083"
     depends_on:
       - druid-coordinator
     networks:
@@ -595,6 +598,8 @@ services:
       POSTGRES_APP_DB: ${POSTGRES_APP_DB}
       DRUID_BROKER_PORT: ${DRUID_BROKER_PORT}
       API_SECRET_KEY: ${API_SECRET_KEY}
+      GEMINI_API_KEY: ${GEMINI_API_KEY}
+      DEFAULT_CHAT_ID: ${DEFAULT_CHAT_ID}
     ports:
       - "${API_PORT}:8000"
     depends_on:
